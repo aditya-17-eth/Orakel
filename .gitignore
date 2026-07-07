@@ -1,0 +1,14 @@
+# Rust
+/target/
+**/target/
+*.wasm
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Internal docs (kept local, not published)
+docs/
+
+# Internal security review (kept local, not published)
+contracts/orakel-contracts/SECURITY_REVIEW.md
