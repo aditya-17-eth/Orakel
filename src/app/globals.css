@@ -1,0 +1,343 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0E1321;
+  --foreground: #E8ECF4;
+  --neon-cyan: #00F0FF;
+  --ultra-magenta: #FF00FF;
+  --electric-lime: #CCFF00;
+  --slate-gray: #343948;
+  --deep-space: #0E1321;
+  --card-bg: #151B2B;
+  --card-border: #1E2538;
+  --text-muted: #8B95A8;
+  --green: #00E676;
+  --red: #FF5252;
+  --yellow: #FFD740;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-neon-cyan: var(--neon-cyan);
+  --color-ultra-magenta: var(--ultra-magenta);
+  --color-electric-lime: var(--electric-lime);
+  --color-slate-gray: var(--slate-gray);
+  --color-deep-space: var(--deep-space);
+  --color-card-bg: var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-text-muted: var(--text-muted);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-yellow: var(--yellow);
+  --font-sans: var(--font-space-grotesk), 'Space Grotesk', sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--slate-gray) transparent;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* ── Glassmorphic Utilities ── */
+.glass {
+  background: rgba(21, 27, 43, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 240, 255, 0.08);
+}
+
+.glass-strong {
+  background: rgba(21, 27, 43, 0.7);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid rgba(0, 240, 255, 0.12);
+}
+
+.glass-shard {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 240, 255, 0.06) 0%,
+    rgba(21, 27, 43, 0.3) 50%,
+    rgba(255, 0, 255, 0.04) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 240, 255, 0.1);
+  clip-path: polygon(
+    0 0,
+    calc(100% - 20px) 0,
+    100% 20px,
+    100% 100%,
+    20px 100%,
+    0 calc(100% - 20px)
+  );
+}
+
+.glass-panel {
+  background: linear-gradient(
+    160deg,
+    rgba(0, 240, 255, 0.05) 0%,
+    rgba(14, 19, 33, 0.8) 40%,
+    rgba(255, 0, 255, 0.03) 100%
+  );
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 240, 255, 0.08);
+  border-radius: 16px;
+}
+
+/* ── Small Glass Shard (for inline elements) ── */
+.glass-shard-sm {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 240, 255, 0.04) 0%,
+    rgba(21, 27, 43, 0.2) 50%,
+    rgba(255, 0, 255, 0.02) 100%
+  );
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 240, 255, 0.08);
+  clip-path: polygon(
+    0 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% 100%,
+    10px 100%,
+    0 calc(100% - 10px)
+  );
+}
+
+/* ── Glow Effects ── */
+.glow-cyan {
+  box-shadow:
+    0 0 20px rgba(0, 240, 255, 0.3),
+    0 0 40px rgba(0, 240, 255, 0.1),
+    inset 0 0 20px rgba(0, 240, 255, 0.05);
+}
+
+.glow-magenta {
+  box-shadow:
+    0 0 20px rgba(255, 0, 255, 0.3),
+    0 0 40px rgba(255, 0, 255, 0.1),
+    inset 0 0 20px rgba(255, 0, 255, 0.05);
+}
+
+.glow-lime {
+  box-shadow:
+    0 0 20px rgba(204, 255, 0, 0.3),
+    0 0 40px rgba(204, 255, 0, 0.1),
+    inset 0 0 20px rgba(204, 255, 0, 0.05);
+}
+
+.glow-cyan-text {
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 30px rgba(0, 240, 255, 0.2);
+}
+
+.glow-magenta-text {
+  text-shadow: 0 0 10px rgba(255, 0, 255, 0.5), 0 0 30px rgba(255, 0, 255, 0.2);
+}
+
+/* ── Grid & Depth ── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+.grid-bg-dense {
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.02) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.depth-gradient {
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    rgba(0, 240, 255, 0.08) 0%,
+    transparent 60%
+  );
+}
+
+/* ── Animations ── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33% { transform: translateY(-8px) rotate(0.5deg); }
+  66% { transform: translateY(4px) rotate(-0.3deg); }
+}
+
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(10px, -5px) scale(1.01); }
+  50% { transform: translate(-5px, 10px) scale(0.99); }
+  75% { transform: translate(-10px, -8px) scale(1.005); }
+}
+
+@keyframes shard-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes data-stream {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 0% 100%; }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+.animate-float { animation: float 8s ease-in-out infinite; }
+.animate-drift { animation: drift 12s ease-in-out infinite; }
+.animate-shard-rotate { animation: shard-rotate 60s linear infinite; }
+.animate-scan-line { animation: scan-line 8s linear infinite; }
+.animate-data-stream { animation: data-stream 4s linear infinite; }
+.animate-flicker { animation: flicker 2s ease-in-out infinite; }
+
+/* ── Reusable Shard Shapes ── */
+.shard {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 24px) 0,
+    100% 24px,
+    100% 100%,
+    24px 100%,
+    0 calc(100% - 24px)
+  );
+}
+
+.shard-sm {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% 100%,
+    12px 100%,
+    0 calc(100% - 12px)
+  );
+}
+
+.shard-lg {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 40px) 0,
+    100% 40px,
+    100% 100%,
+    40px 100%,
+    0 calc(100% - 40px)
+  );
+}
+
+/* ── Consensus Visualizer ── */
+.consensus-ring {
+  border-radius: 50%;
+  border: 2px solid rgba(0, 240, 255, 0.2);
+  box-shadow:
+    0 0 15px rgba(0, 240, 255, 0.15),
+    inset 0 0 15px rgba(0, 240, 255, 0.05);
+}
+
+.consensus-ring-active {
+  border-color: rgba(0, 240, 255, 0.6);
+  box-shadow:
+    0 0 25px rgba(0, 240, 255, 0.3),
+    inset 0 0 25px rgba(0, 240, 255, 0.1);
+}
+
+/* ── Telemetry Bar ── */
+.telemetry-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--ultra-magenta));
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+/* ── Radial Gradient Background ── */
+.bg-gradient-radial {
+  background: radial-gradient(ellipse at center, var(--neon-cyan, #00F0FF) 0%, transparent 70%);
+}
+
+/* ── Glow Border (hover) ── */
+.glow-border-cyan {
+  box-shadow:
+    0 0 0 1px rgba(0, 240, 255, 0.15),
+    0 0 20px rgba(0, 240, 255, 0.1),
+    0 0 40px rgba(0, 240, 255, 0.05);
+}
+.glow-border-magenta {
+  box-shadow:
+    0 0 0 1px rgba(255, 0, 255, 0.15),
+    0 0 20px rgba(255, 0, 255, 0.1),
+    0 0 40px rgba(255, 0, 255, 0.05);
+}
+.glow-border-lime {
+  box-shadow:
+    0 0 0 1px rgba(204, 255, 0, 0.15),
+    0 0 20px rgba(204, 255, 0, 0.1),
+    0 0 40px rgba(204, 255, 0, 0.05);
+}
+
+/* ── Entrance Animations ── */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in-scale {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes border-glow-pulse {
+  0%, 100% { border-color: rgba(0, 240, 255, 0.1); }
+  50% { border-color: rgba(0, 240, 255, 0.25); }
+}
+@keyframes bar-fill {
+  from { width: 0%; }
+}
+
+.animate-fade-in-up { animation: fade-in-up 0.6s ease-out both; }
+.animate-fade-in-scale { animation: fade-in-scale 0.5s ease-out both; }
+.animate-slide-in-left { animation: slide-in-left 0.5s ease-out both; }
+.animate-border-glow-pulse { animation: border-glow-pulse 3s ease-in-out infinite; }
+
+/* Staggered entrance delays */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+
+/* ── Animated Resource Bar ── */
+.resource-bar-animated {
+  animation: bar-fill 1.5s ease-out both;
+}
+
+/* ── Selection Styling ── */
+::selection {
+  background: rgba(0, 240, 255, 0.3);
+  color: #ffffff;
+}
