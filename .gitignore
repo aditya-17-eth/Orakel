@@ -2,6 +2,8 @@
 /target/
 **/target/
 *.wasm
+node_modules/
+.next/
 
 # Env / secrets (never commit)
 .env

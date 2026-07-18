@@ -12,9 +12,14 @@
   },
   "scripts": {
     "test": "node --test",
-    "smoke": "node scripts/smoke.js"
+    "smoke": "node scripts/smoke.js",
+    "indexer": "node scripts/indexer.js",
+    "indexer:once": "node scripts/indexer.js --once",
+    "status": "node scripts/status.js"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "^13.0.0"
+    "@stellar/stellar-sdk": "^13.0.0",
+    "dotenv": "^16.4.7",
+    "@supabase/supabase-js": "^2.49.8"
   }
 }
