@@ -1,0 +1,20 @@
+{
+  "name": "@orakel/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared Stellar/Soroban plumbing for the Orakel bots (keeper/watcher/finalizer).",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node scripts/smoke.js"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^13.0.0"
+  }
+}

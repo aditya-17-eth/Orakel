@@ -3,12 +3,17 @@
 **/target/
 *.wasm
 
+# Env / secrets (never commit)
+.env
+.env.local
+
 # OS / editor
 .DS_Store
 Thumbs.db
 
-# Internal docs (kept local, not published)
-docs/
+# Internal docs kept local; publish only the market criteria docs
+docs/*
+!docs/criteria/
 
 # Internal security review (kept local, not published)
 contracts/orakel-contracts/SECURITY_REVIEW.md
