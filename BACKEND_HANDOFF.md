@@ -26,6 +26,11 @@ owned frontend in `web/` and Telegram work were intentionally not changed.
   - `getWalletActivity()` reads only the authenticated wallet's indexed
     activity events with a stable cursor.
   - user wallets are validated as Stellar G-addresses before any query.
+- Resolution/evidence timeline queries combining on-chain market metadata with
+  indexed lifecycle events and safe Pinata criteria links.
+- Server-side trading leaderboard aggregation from buy/sell event volume.
+- Testnet-only XLM faucet requests through Stellar Friendbot with an atomic
+  Supabase cooldown and failure-slot release.
 - Docker and Docker Compose files for a restart-safe, long-running worker.
 - Environment examples and setup/deployment documentation.
 
@@ -107,8 +112,12 @@ limit 50;
 - `bots/shared/scripts/status.js` — dependency health/status check.
 - `supabase/migrations/001_contract_events.sql` — database schema.
 - `supabase/migrations/002_activity_topics_index.sql` — wallet activity query index.
+- `supabase/migrations/003_leaderboard_faucet.sql` — leaderboard SQL function and faucet cooldown.
 - `bots/shared/portfolio.js` — on-chain portfolio reads and valuation.
 - `bots/shared/activity.js` — server-side wallet activity query.
+- `bots/shared/timeline.js` — resolution timeline and evidence link.
+- `bots/shared/leaderboard.js` — trading-volume leaderboard query.
+- `bots/shared/faucet.js` — rate-limited Testnet Friendbot integration.
 - `bots/shared/Dockerfile` and `docker-compose.yml` — worker deployment.
 - `SUPABASE_SETUP.md` and `DEPLOY_INDEXER.md` — setup/operations guides.
 

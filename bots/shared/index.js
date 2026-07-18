@@ -4,4 +4,7 @@ export { pollEvents, decodeEvent, createFileCheckpoint } from './events.js';
 export { runIndexer } from './indexer.js';
 export { getPortfolio, calculatePositionMarkValue, calculateClaimablePosition, validateWallet } from './portfolio.js';
 export { getWalletActivity } from './activity.js';
+export { getResolutionTimeline, formatCriteriaLink } from './timeline.js';
+export { getLeaderboard } from './leaderboard.js';
+export { requestFaucet, FaucetCooldownError } from './faucet.js';
 export { sendTelegram } from './telegram.js';
