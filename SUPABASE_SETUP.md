@@ -5,7 +5,9 @@ never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser or add it to a
 `NEXT_PUBLIC_*` variable.
 
 1. Create a Supabase project.
-2. In its SQL Editor, run `supabase/migrations/001_contract_events.sql`.
+2. In its SQL Editor, run both migrations in order:
+   - `supabase/migrations/001_contract_events.sql`
+   - `supabase/migrations/002_activity_topics_index.sql`
 3. Add these values to the backend root `.env` file:
 
 ```env
