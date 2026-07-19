@@ -1,0 +1,20 @@
+services:
+  indexer:
+    build:
+      context: ./bots/shared
+    env_file:
+      - .env
+    environment:
+      INDEXER_CHECKPOINT_PATH: /app/data/indexer-checkpoint.json
+    restart: unless-stopped
+    volumes:
+      - indexer-state:/app/data
+    healthcheck:
+      test: ["CMD", "npm", "run", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  indexer-state:
