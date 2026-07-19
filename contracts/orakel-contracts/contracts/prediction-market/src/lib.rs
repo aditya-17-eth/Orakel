@@ -41,6 +41,9 @@ use soroban_sdk::{
 const BPS_DENOM: i128 = 10_000;
 /// Hard cap on combined fees (5%) — admin can never set abusive fees.
 const MAX_TOTAL_FEE_BPS: u32 = 500;
+/// Maximum total position exposure as a multiple of posted share collateral.
+/// 30_000 bps = 3x total exposure, i.e. debt may be at most 2x collateral.
+const MAX_LEVERAGE_BPS: u32 = 30_000;
 /// Minimum liquidity permanently locked in a pool on creation, so reserves
 /// can never be fully drained and division by ~zero cannot occur.
 const MIN_LOCKED_LIQUIDITY: i128 = 1_000; // 0.0001 USDC at 7 decimals
@@ -89,6 +92,14 @@ pub enum Error {
     Overflow = 26,
     SelfDispute = 27,
     InvalidOutcome = 28,
+    LoansDisabled = 29,
+    LoanAlreadyExists = 30,
+    LoanNotFound = 31,
+    LoanTooLarge = 32,
+    LoanReserveTooSmall = 33,
+    LoanNotHealthy = 34,
+    LoanNotSettled = 35,
+    InvalidLeverage = 36,
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +182,19 @@ pub struct Position {
 }
 
 #[contracttype]
+#[derive(Clone, Debug, Default)]
+pub struct Loan {
+    /// Shares held by the contract as collateral while the loan is active.
+    pub yes_collateral: i128,
+    pub no_collateral: i128,
+    /// User-provided token collateral held outside market collateral.
+    pub cash_collateral: i128,
+    /// Principal still owed to the protocol loan reserve.
+    pub debt: i128,
+    pub opened_at: u64,
+}
+
+#[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     Admin,
@@ -187,8 +211,12 @@ pub enum DataKey {
     MinBond,
     MarketCount,
     ProtocolFees,
+    LoansEnabled,
+    MaxLeverageBps,
+    LoanReserve,
     Market(u64),
     Position(u64, Address),
+    Loan(u64, Address),
     LpShares(u64, Address),
 }
 
@@ -233,6 +261,11 @@ impl OrakelMarket {
         s.set(&DataKey::MinBond, &min_bond);
         s.set(&DataKey::MarketCount, &0u64);
         s.set(&DataKey::ProtocolFees, &0i128);
+        // Lending is opt-in. It remains disabled until the admin funds a
+        // separate reserve and explicitly enables it after risk review.
+        s.set(&DataKey::LoansEnabled, &false);
+        s.set(&DataKey::MaxLeverageBps, &MAX_LEVERAGE_BPS);
+        s.set(&DataKey::LoanReserve, &0i128);
         extend_instance(&env);
     }
 
@@ -240,8 +273,7 @@ impl OrakelMarket {
     pub fn set_paused(env: Env, paused: bool) {
         require_admin(&env);
         env.storage().instance().set(&DataKey::Paused, &paused);
-        env.events()
-            .publish((symbol_short!("paused"),), paused);
+        env.events().publish((symbol_short!("paused"),), paused);
     }
 
     /// Rotate the arbiter (e.g. new multisig account). Admin-gated.
@@ -274,9 +306,55 @@ impl OrakelMarket {
         }
         s.set(&DataKey::ProtocolFees, &0i128);
         token_client(&env).transfer(&env.current_contract_address(), &to, &amount);
-        env.events()
-            .publish((symbol_short!("feeswd"),), amount);
+        env.events().publish((symbol_short!("feeswd"),), amount);
         amount
+    }
+
+    /// Configure the isolated position-loan facility. Loans are disabled by
+    /// default and should only be enabled after the reserve is funded.
+    pub fn set_loan_config(env: Env, enabled: bool, max_leverage_bps: u32) {
+        require_admin(&env);
+        if max_leverage_bps < 10_000 || max_leverage_bps > MAX_LEVERAGE_BPS {
+            panic_with_error!(&env, Error::InvalidLeverage);
+        }
+        let s = env.storage().instance();
+        s.set(&DataKey::LoansEnabled, &enabled);
+        s.set(&DataKey::MaxLeverageBps, &max_leverage_bps);
+        env.events()
+            .publish((symbol_short!("loan_cfg"),), (enabled, max_leverage_bps));
+    }
+
+    /// Fund the loan reserve with the collateral token. Reserve funds are
+    /// kept separate from market collateral and are the only source of new
+    /// borrowing liquidity.
+    pub fn fund_loan_reserve(env: Env, from: Address, amount: i128) {
+        from.require_auth();
+        if amount <= 0 {
+            panic_with_error!(&env, Error::InvalidAmount);
+        }
+        token_client(&env).transfer(&from, &env.current_contract_address(), &amount);
+        let s = env.storage().instance();
+        let reserve: i128 = s.get(&DataKey::LoanReserve).unwrap_or(0);
+        s.set(&DataKey::LoanReserve, &checked_add(&env, reserve, amount));
+        env.events()
+            .publish((symbol_short!("loan_fund"), from), amount);
+    }
+
+    /// Withdraw only free loan-reserve liquidity. Borrowed principal is never
+    /// counted as free reserve, so withdrawals cannot strand active loans.
+    pub fn withdraw_loan_reserve(env: Env, to: Address, amount: i128) {
+        require_admin(&env);
+        if amount <= 0 {
+            panic_with_error!(&env, Error::InvalidAmount);
+        }
+        let s = env.storage().instance();
+        let reserve: i128 = s.get(&DataKey::LoanReserve).unwrap_or(0);
+        if amount > reserve {
+            panic_with_error!(&env, Error::LoanReserveTooSmall);
+        }
+        s.set(&DataKey::LoanReserve, &(reserve - amount));
+        token_client(&env).transfer(&env.current_contract_address(), &to, &amount);
+        env.events().publish((symbol_short!("loan_wd"), to), amount);
     }
 
     // ------------------------------------------------------------------
@@ -313,11 +391,7 @@ impl OrakelMarket {
         if dispute_window < MIN_DISPUTE_WINDOW {
             panic_with_error!(&env, Error::InvalidTimes);
         }
-        let min_bond: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::MinBond)
-            .unwrap_or(0);
+        let min_bond: i128 = env.storage().instance().get(&DataKey::MinBond).unwrap_or(0);
         if bond < min_bond {
             panic_with_error!(&env, Error::BondTooSmall);
         }
@@ -640,6 +714,189 @@ impl OrakelMarket {
     }
 
     // ------------------------------------------------------------------
+    // Isolated position loans
+    // ------------------------------------------------------------------
+
+    /// Borrow collateral against YES/NO shares already owned by `borrower`.
+    /// The shares are moved out of the user's spendable Position and held in
+    /// the Loan record until repayment or resolution settlement.
+    ///
+    /// The configured leverage is a total-exposure multiplier. At the default
+    /// 3x ceiling, debt is limited to 2x the current AMM-marked collateral
+    /// value. The facility is disabled by default and requires a funded,
+    /// separate loan reserve.
+    pub fn borrow(
+        env: Env,
+        market_id: u64,
+        borrower: Address,
+        borrow_yes: bool,
+        collateral_shares: i128,
+        cash_collateral: i128,
+        amount: i128,
+    ) -> i128 {
+        borrower.require_auth();
+        require_not_paused(&env);
+        if collateral_shares <= 0 || cash_collateral <= 0 || amount <= 0 {
+            panic_with_error!(&env, Error::InvalidAmount);
+        }
+        let loans_enabled: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::LoansEnabled)
+            .unwrap_or(false);
+        if !loans_enabled {
+            panic_with_error!(&env, Error::LoansDisabled);
+        }
+        let m = load_market(&env, market_id);
+        require_open_for_trading(&env, &m);
+        if get_loan(&env, market_id, &borrower).debt > 0 {
+            panic_with_error!(&env, Error::LoanAlreadyExists);
+        }
+
+        let mut pos = get_position(&env, market_id, &borrower);
+        let available = if borrow_yes { pos.yes } else { pos.no };
+        if collateral_shares > available {
+            panic_with_error!(&env, Error::InsufficientShares);
+        }
+
+        let price = mul_div_floor(
+            &env,
+            m.no_reserve,
+            BPS_DENOM,
+            checked_add(&env, m.yes_reserve, m.no_reserve),
+        );
+        let collateral_value = if borrow_yes {
+            mul_div_floor(&env, collateral_shares, price, BPS_DENOM)
+        } else {
+            mul_div_floor(&env, collateral_shares, BPS_DENOM - price, BPS_DENOM)
+        };
+        let leverage: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MaxLeverageBps)
+            .unwrap_or(MAX_LEVERAGE_BPS);
+        let total_collateral = checked_add(&env, collateral_value, cash_collateral);
+        let max_debt = mul_div_floor(&env, total_collateral, (leverage - 10_000) as i128, 10_000);
+        if amount > max_debt {
+            panic_with_error!(&env, Error::LoanTooLarge);
+        }
+
+        let s = env.storage().instance();
+        let reserve: i128 = s.get(&DataKey::LoanReserve).unwrap_or(0);
+        if amount > reserve {
+            panic_with_error!(&env, Error::LoanReserveTooSmall);
+        }
+        token_client(&env).transfer(&borrower, &env.current_contract_address(), &cash_collateral);
+        s.set(&DataKey::LoanReserve, &(reserve - amount));
+
+        if borrow_yes {
+            pos.yes -= collateral_shares;
+        } else {
+            pos.no -= collateral_shares;
+        }
+        set_position(&env, market_id, &borrower, &pos);
+        set_loan(
+            &env,
+            market_id,
+            &borrower,
+            &Loan {
+                yes_collateral: if borrow_yes { collateral_shares } else { 0 },
+                no_collateral: if borrow_yes { 0 } else { collateral_shares },
+                cash_collateral,
+                debt: amount,
+                opened_at: env.ledger().timestamp(),
+            },
+        );
+        token_client(&env).transfer(&env.current_contract_address(), &borrower, &amount);
+        env.events().publish(
+            (symbol_short!("borrow"), market_id, borrower),
+            (collateral_shares, amount),
+        );
+        amount
+    }
+
+    /// Repay an active loan. Full repayment returns the pledged shares to the
+    /// user's spendable Position; partial repayment keeps the collateral
+    /// locked until the remaining debt is paid.
+    pub fn repay(env: Env, market_id: u64, borrower: Address, amount: i128) -> i128 {
+        borrower.require_auth();
+        if amount <= 0 {
+            panic_with_error!(&env, Error::InvalidAmount);
+        }
+        let mut loan = get_loan(&env, market_id, &borrower);
+        if loan.debt <= 0 {
+            panic_with_error!(&env, Error::LoanNotFound);
+        }
+        let paid = if amount > loan.debt {
+            loan.debt
+        } else {
+            amount
+        };
+        token_client(&env).transfer(&borrower, &env.current_contract_address(), &paid);
+        let s = env.storage().instance();
+        let reserve: i128 = s.get(&DataKey::LoanReserve).unwrap_or(0);
+        s.set(&DataKey::LoanReserve, &checked_add(&env, reserve, paid));
+        loan.debt -= paid;
+        if loan.debt == 0 {
+            let mut pos = get_position(&env, market_id, &borrower);
+            pos.yes = checked_add(&env, pos.yes, loan.yes_collateral);
+            pos.no = checked_add(&env, pos.no, loan.no_collateral);
+            set_position(&env, market_id, &borrower, &pos);
+            set_loan(&env, market_id, &borrower, &Loan::default());
+            token_client(&env).transfer(
+                &env.current_contract_address(),
+                &borrower,
+                &loan.cash_collateral,
+            );
+        } else {
+            set_loan(&env, market_id, &borrower, &loan);
+        }
+        env.events()
+            .publish((symbol_short!("repay"), market_id, borrower), paid);
+        paid
+    }
+
+    /// Settle a loan after resolution. Anyone may call this to make stuck
+    /// positions recoverable. Collateral first repays the reserve; any excess
+    /// is sent to the borrower. Any shortfall is isolated to the loan reserve.
+    pub fn settle_loan(env: Env, market_id: u64, borrower: Address) -> i128 {
+        let mut m = load_market(&env, market_id);
+        if m.state != MarketState::Resolved {
+            panic_with_error!(&env, Error::NotResolved);
+        }
+        let loan = get_loan(&env, market_id, &borrower);
+        if loan.debt <= 0 {
+            panic_with_error!(&env, Error::LoanNotFound);
+        }
+        let outcome = outcome_from_u32(&env, m.outcome.unwrap());
+        let share_payout = payout_for(&env, &loan.yes_collateral, &loan.no_collateral, outcome);
+        let total_collateral = checked_add(&env, loan.cash_collateral, share_payout);
+        let reserve_repayment = if total_collateral >= loan.debt {
+            loan.debt
+        } else {
+            total_collateral
+        };
+        let excess = total_collateral - reserve_repayment;
+        let s = env.storage().instance();
+        let reserve: i128 = s.get(&DataKey::LoanReserve).unwrap_or(0);
+        s.set(
+            &DataKey::LoanReserve,
+            &checked_add(&env, reserve, reserve_repayment),
+        );
+        set_loan(&env, market_id, &borrower, &Loan::default());
+        m.collateral_locked -= share_payout;
+        save_market(&env, &m);
+        if excess > 0 {
+            token_client(&env).transfer(&env.current_contract_address(), &borrower, &excess);
+        }
+        env.events().publish(
+            (symbol_short!("loan_set"), market_id, borrower),
+            total_collateral,
+        );
+        total_collateral
+    }
+
+    // ------------------------------------------------------------------
     // Resolution: propose -> (dispute) -> finalize / arbiter_resolve
     // ------------------------------------------------------------------
 
@@ -664,8 +921,10 @@ impl OrakelMarket {
         m.proposal_time = now;
         save_market(&env, &m);
 
-        env.events()
-            .publish((symbol_short!("propose"), market_id, proposer), outcome as u32);
+        env.events().publish(
+            (symbol_short!("propose"), market_id, proposer),
+            outcome as u32,
+        );
     }
 
     /// Dispute an active proposal within the dispute window, escrowing an
@@ -773,7 +1032,12 @@ impl OrakelMarket {
             panic_with_error!(&env, Error::NotResolved);
         }
         let pos = get_position(&env, market_id, &user);
-        let payout = payout_for(&env, &pos.yes, &pos.no, outcome_from_u32(&env, m.outcome.unwrap()));
+        let payout = payout_for(
+            &env,
+            &pos.yes,
+            &pos.no,
+            outcome_from_u32(&env, m.outcome.unwrap()),
+        );
         if payout <= 0 {
             panic_with_error!(&env, Error::NothingToClaim);
         }
@@ -833,6 +1097,10 @@ impl OrakelMarket {
 
     pub fn get_user_position(env: Env, market_id: u64, user: Address) -> Position {
         get_position(&env, market_id, &user)
+    }
+
+    pub fn get_user_loan(env: Env, market_id: u64, user: Address) -> Loan {
+        get_loan(&env, market_id, &user)
     }
 
     pub fn get_user_lp(env: Env, market_id: u64, user: Address) -> i128 {
@@ -925,7 +1193,7 @@ fn require_open_for_trading(env: &Env, m: &Market) {
     }
 }
 
-fn token_client(env: &Env) -> token::Client {
+fn token_client(env: &Env) -> token::Client<'_> {
     let addr: Address = env
         .storage()
         .instance()
@@ -1002,6 +1270,25 @@ fn get_lp_shares(env: &Env, id: u64, user: &Address) -> i128 {
         .persistent()
         .get(&DataKey::LpShares(id, user.clone()))
         .unwrap_or(0)
+}
+
+fn get_loan(env: &Env, id: u64, user: &Address) -> Loan {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Loan(id, user.clone()))
+        .unwrap_or_default()
+}
+
+fn set_loan(env: &Env, id: u64, user: &Address, loan: &Loan) {
+    let key = DataKey::Loan(id, user.clone());
+    if loan.debt == 0 {
+        env.storage().persistent().remove(&key);
+        return;
+    }
+    env.storage().persistent().set(&key, loan);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND);
 }
 
 fn set_lp_shares(env: &Env, id: u64, user: &Address, amount: i128) {

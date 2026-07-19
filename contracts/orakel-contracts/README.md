@@ -7,6 +7,8 @@ Binary prediction markets (any sport, any objectively verifiable event) with:
 - Void outcome (cancelled fixtures pay 0.5/share)
 - Per-market position caps + hard trading lock time (insider-trading mitigation)
 - LP provisioning with fee share; pause that can never block user exits
+- Opt-in reserve-backed loans against user shares plus borrower token collateral, with a 3x total-exposure ceiling
+- Combined protocol + LP trading fees hard-capped at 5% (500 bps)
 
 State machine: `Open → (trading locked by time) → Proposed → [Disputed] → Resolved`
 
@@ -78,7 +80,22 @@ Rule of thumb: `bond ≥ initial_liquidity` (see SECURITY_REVIEW.md, M-1).
 
 Key read entrypoints for the indexer/frontend: `get_market`, `yes_price_bps`,
 `get_user_position`, `get_user_lp`, `market_count`, plus events:
-`mkt_new, buy, sell, liq_add, liq_rem, propose, dispute, final, arb_res, claim, claim_lp, paused, arbiter, feeswd`.
+`mkt_new, buy, sell, liq_add, liq_rem, borrow, repay, loan_set, propose, dispute, final, arb_res, claim, claim_lp, paused, arbiter, feeswd`.
+
+## Loans and leverage
+
+Loans are disabled at initialization. The admin must first fund the isolated
+loan reserve with `fund_loan_reserve`, then enable it with `set_loan_config`.
+The default maximum is 30,000 bps (3x total exposure, so debt is capped at 2x
+the combined value of pledged shares and user-provided token collateral).
+Borrowed shares and token collateral are locked until `repay` or
+post-resolution `settle_loan`.
+
+This first version is a controlled testnet facility, not a substitute for an
+audited lending protocol: AMM prices are not an oracle, there is no pre-lock
+liquidation auction, and reserve sizing must be conservative. Do not enable it
+on mainnet without an independent oracle, liquidation design, bad-debt policy,
+and third-party audit.
 
 ## Files
 
