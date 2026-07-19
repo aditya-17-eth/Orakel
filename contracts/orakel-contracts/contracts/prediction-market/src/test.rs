@@ -323,7 +323,7 @@ fn loans_are_disabled_by_default() {
     fund(&s, &alice, 1_000 * UNIT);
     let shares = s.contract.buy(&id, &alice, &true, &(100 * UNIT), &0);
     s.contract
-        .borrow(&id, &alice, &true, &(shares / 4), &UNIT);
+        .borrow(&id, &alice, &true, &(shares / 4), &UNIT, &UNIT);
 }
 
 #[test]
@@ -338,7 +338,9 @@ fn borrow_and_repay_returns_pledged_shares() {
     s.contract.fund_loan_reserve(&s.admin, &(1_000 * UNIT));
     s.contract.set_loan_config(&true, &30_000);
     let collateral = shares / 4;
-    let borrowed = s.contract.borrow(&id, &alice, &true, &collateral, &UNIT);
+    let borrowed = s
+        .contract
+        .borrow(&id, &alice, &true, &collateral, &(10 * UNIT), &UNIT);
     assert_eq!(borrowed, UNIT);
     assert_eq!(s.contract.get_user_loan(&id, &alice).debt, UNIT);
 
@@ -358,7 +360,8 @@ fn resolved_loan_is_settled_from_pledged_shares() {
     s.contract.fund_loan_reserve(&s.admin, &(1_000 * UNIT));
     s.contract.set_loan_config(&true, &30_000);
     let collateral = shares / 4;
-    s.contract.borrow(&id, &alice, &true, &collateral, &UNIT);
+    s.contract
+        .borrow(&id, &alice, &true, &collateral, &(10 * UNIT), &UNIT);
 
     warp(&s, 20_001);
     let keeper = Address::generate(&s.env);
@@ -368,6 +371,6 @@ fn resolved_loan_is_settled_from_pledged_shares() {
     s.contract.finalize(&id);
 
     let settled = s.contract.settle_loan(&id, &alice);
-    assert_eq!(settled, collateral);
+    assert_eq!(settled, collateral + 10 * UNIT);
     assert_eq!(s.contract.get_user_loan(&id, &alice).debt, 0);
 }

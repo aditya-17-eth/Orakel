@@ -187,6 +187,8 @@ pub struct Loan {
     /// Shares held by the contract as collateral while the loan is active.
     pub yes_collateral: i128,
     pub no_collateral: i128,
+    /// User-provided token collateral held outside market collateral.
+    pub cash_collateral: i128,
     /// Principal still owed to the protocol loan reserve.
     pub debt: i128,
     pub opened_at: u64,
@@ -729,11 +731,12 @@ impl OrakelMarket {
         borrower: Address,
         borrow_yes: bool,
         collateral_shares: i128,
+        cash_collateral: i128,
         amount: i128,
     ) -> i128 {
         borrower.require_auth();
         require_not_paused(&env);
-        if collateral_shares <= 0 || amount <= 0 {
+        if collateral_shares <= 0 || cash_collateral <= 0 || amount <= 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
         let loans_enabled: bool = env
@@ -772,7 +775,8 @@ impl OrakelMarket {
             .instance()
             .get(&DataKey::MaxLeverageBps)
             .unwrap_or(MAX_LEVERAGE_BPS);
-        let max_debt = mul_div_floor(&env, collateral_value, (leverage - 10_000) as i128, 10_000);
+        let total_collateral = checked_add(&env, collateral_value, cash_collateral);
+        let max_debt = mul_div_floor(&env, total_collateral, (leverage - 10_000) as i128, 10_000);
         if amount > max_debt {
             panic_with_error!(&env, Error::LoanTooLarge);
         }
@@ -782,6 +786,7 @@ impl OrakelMarket {
         if amount > reserve {
             panic_with_error!(&env, Error::LoanReserveTooSmall);
         }
+        token_client(&env).transfer(&borrower, &env.current_contract_address(), &cash_collateral);
         s.set(&DataKey::LoanReserve, &(reserve - amount));
 
         if borrow_yes {
@@ -797,6 +802,7 @@ impl OrakelMarket {
             &Loan {
                 yes_collateral: if borrow_yes { collateral_shares } else { 0 },
                 no_collateral: if borrow_yes { 0 } else { collateral_shares },
+                cash_collateral,
                 debt: amount,
                 opened_at: env.ledger().timestamp(),
             },
@@ -837,6 +843,11 @@ impl OrakelMarket {
             pos.no = checked_add(&env, pos.no, loan.no_collateral);
             set_position(&env, market_id, &borrower, &pos);
             set_loan(&env, market_id, &borrower, &Loan::default());
+            token_client(&env).transfer(
+                &env.current_contract_address(),
+                &borrower,
+                &loan.cash_collateral,
+            );
         } else {
             set_loan(&env, market_id, &borrower, &loan);
         }
@@ -858,14 +869,14 @@ impl OrakelMarket {
             panic_with_error!(&env, Error::LoanNotFound);
         }
         let outcome = outcome_from_u32(&env, m.outcome.unwrap());
-        let collateral_payout =
-            payout_for(&env, &loan.yes_collateral, &loan.no_collateral, outcome);
-        let reserve_repayment = if collateral_payout >= loan.debt {
+        let share_payout = payout_for(&env, &loan.yes_collateral, &loan.no_collateral, outcome);
+        let total_collateral = checked_add(&env, loan.cash_collateral, share_payout);
+        let reserve_repayment = if total_collateral >= loan.debt {
             loan.debt
         } else {
-            collateral_payout
+            total_collateral
         };
-        let excess = collateral_payout - reserve_repayment;
+        let excess = total_collateral - reserve_repayment;
         let s = env.storage().instance();
         let reserve: i128 = s.get(&DataKey::LoanReserve).unwrap_or(0);
         s.set(
@@ -873,16 +884,16 @@ impl OrakelMarket {
             &checked_add(&env, reserve, reserve_repayment),
         );
         set_loan(&env, market_id, &borrower, &Loan::default());
-        m.collateral_locked -= collateral_payout;
+        m.collateral_locked -= share_payout;
         save_market(&env, &m);
         if excess > 0 {
             token_client(&env).transfer(&env.current_contract_address(), &borrower, &excess);
         }
         env.events().publish(
             (symbol_short!("loan_set"), market_id, borrower),
-            collateral_payout,
+            total_collateral,
         );
-        collateral_payout
+        total_collateral
     }
 
     // ------------------------------------------------------------------

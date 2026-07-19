@@ -7,7 +7,7 @@ Binary prediction markets (any sport, any objectively verifiable event) with:
 - Void outcome (cancelled fixtures pay 0.5/share)
 - Per-market position caps + hard trading lock time (insider-trading mitigation)
 - LP provisioning with fee share; pause that can never block user exits
-- Opt-in reserve-backed loans against user shares, with a 3x total-exposure ceiling
+- Opt-in reserve-backed loans against user shares plus borrower token collateral, with a 3x total-exposure ceiling
 - Combined protocol + LP trading fees hard-capped at 5% (500 bps)
 
 State machine: `Open → (trading locked by time) → Proposed → [Disputed] → Resolved`
@@ -87,9 +87,9 @@ Key read entrypoints for the indexer/frontend: `get_market`, `yes_price_bps`,
 Loans are disabled at initialization. The admin must first fund the isolated
 loan reserve with `fund_loan_reserve`, then enable it with `set_loan_config`.
 The default maximum is 30,000 bps (3x total exposure, so debt is capped at 2x
-the current AMM-marked value of pledged shares). Borrowed shares are removed
-from the user's spendable position until `repay` or post-resolution
-`settle_loan`.
+the combined value of pledged shares and user-provided token collateral).
+Borrowed shares and token collateral are locked until `repay` or
+post-resolution `settle_loan`.
 
 This first version is a controlled testnet facility, not a substitute for an
 audited lending protocol: AMM prices are not an oracle, there is no pre-lock
