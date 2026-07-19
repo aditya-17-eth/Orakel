@@ -9,6 +9,7 @@ export const TOKEN_DECIMALS = 7;
 export const FEE_BPS = 200n;
 
 const READ_SOURCE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+let loansAvailable: boolean | null = null;
 
 function u64(value: number | bigint) { return nativeToScVal(BigInt(value), { type: "u64" }); }
 function i128(value: bigint | number | string) { return nativeToScVal(BigInt(value), { type: "i128" }); }
@@ -72,15 +73,25 @@ export async function getUserPosition(id: number, user: string): Promise<Positio
 }
 export async function getUserLp(id: number, user: string) { return asBigInt(await simulate("get_user_lp", [u64(id), addr(user)])); }
 export async function getUserLoan(id: number, user: string): Promise<Loan> {
-  const raw = await simulate("get_user_loan", [u64(id), addr(user)]) as Record<string, unknown>;
-  return {
-    yesCollateral: asBigInt(raw.yes_collateral ?? raw.yesCollateral),
-    noCollateral: asBigInt(raw.no_collateral ?? raw.noCollateral),
-    cashCollateral: asBigInt(raw.cash_collateral ?? raw.cashCollateral),
-    debt: asBigInt(raw.debt),
-    openedAt: asNumber(raw.opened_at ?? raw.openedAt),
-  };
+  try {
+    const raw = await simulate("get_user_loan", [u64(id), addr(user)]) as Record<string, unknown>;
+    loansAvailable = true;
+    return {
+      yesCollateral: asBigInt(raw.yes_collateral ?? raw.yesCollateral),
+      noCollateral: asBigInt(raw.no_collateral ?? raw.noCollateral),
+      cashCollateral: asBigInt(raw.cash_collateral ?? raw.cashCollateral),
+      debt: asBigInt(raw.debt),
+      openedAt: asNumber(raw.opened_at ?? raw.openedAt),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/missingvalue|non-existent contract function|trying to invoke non-existent/i.test(message) || !/get_user_loan|loan/i.test(message)) throw error;
+    loansAvailable = false;
+    return { yesCollateral: 0n, noCollateral: 0n, cashCollateral: 0n, debt: 0n, openedAt: 0 };
+  }
 }
+
+export function loanFeatureStatus() { return loansAvailable; }
 
 export function buyQuote(market: Market, amount: bigint, buyYes: boolean) {
   const invest = amount * (10000n - FEE_BPS) / 10000n;

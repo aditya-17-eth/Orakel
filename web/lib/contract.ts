@@ -10,6 +10,14 @@ import { ContractQuote, MarketState, Outcome, ParsedLoan, ParsedMarket, ParsedPo
 
 const READ_SOURCE = new StellarSdk.Account(StellarSdk.Keypair.random().publicKey(), "0");
 const CLAIM_RESTORE_ERROR = "RESTORE_FOOTPRINT_REQUIRED";
+let loansAvailable: boolean | null = null;
+
+function isMissingLoanEntrypoint(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /missingvalue|non-existent contract function|trying to invoke non-existent/i.test(message) && /get_user_loan|loan/i.test(message);
+}
+
+export function loanFeatureStatus() { return loansAvailable; }
 
 function contract() {
   return new StellarSdk.Contract(requireContractId());
@@ -106,15 +114,22 @@ export async function getUserLpShares(marketId: number, address: string) {
 }
 
 export async function getUserLoan(marketId: number, address: string): Promise<ParsedLoan> {
-  const raw = await simulateRead("get_user_loan", scU64(marketId), scAddress(address));
-  const openedAt = Number(raw?.opened_at || 0);
-  return {
-    yesCollateral: contractAmountToUSDC(raw?.yes_collateral),
-    noCollateral: contractAmountToUSDC(raw?.no_collateral),
-    cashCollateral: contractAmountToUSDC(raw?.cash_collateral),
-    debt: contractAmountToUSDC(raw?.debt),
-    openedAt: openedAt > 0 ? new Date(openedAt * 1000) : null,
-  };
+  try {
+    const raw = await simulateRead("get_user_loan", scU64(marketId), scAddress(address));
+    loansAvailable = true;
+    const openedAt = Number(raw?.opened_at || 0);
+    return {
+      yesCollateral: contractAmountToUSDC(raw?.yes_collateral),
+      noCollateral: contractAmountToUSDC(raw?.no_collateral),
+      cashCollateral: contractAmountToUSDC(raw?.cash_collateral),
+      debt: contractAmountToUSDC(raw?.debt),
+      openedAt: openedAt > 0 ? new Date(openedAt * 1000) : null,
+    };
+  } catch (error) {
+    if (!isMissingLoanEntrypoint(error)) throw error;
+    loansAvailable = false;
+    return { yesCollateral: 0, noCollateral: 0, cashCollateral: 0, debt: 0, openedAt: null };
+  }
 }
 
 export async function quoteBuy(

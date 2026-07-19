@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { buildBorrowTx, buildRepayTx, buildSettleLoanTx, getUserLoan, submitSignedTx } from "@/lib/contract";
+import { buildBorrowTx, buildRepayTx, buildSettleLoanTx, getUserLoan, loanFeatureStatus, submitSignedTx } from "@/lib/contract";
 import { formatUSDC, humanizeContractError } from "@/lib/format";
 import { MarketState, ParsedLoan, ParsedMarket, ParsedPosition } from "@/lib/types";
 
@@ -23,9 +23,10 @@ export function LoanPanel({ market, position, onComplete }: { market: ParsedMark
   const [amount, setAmount] = useState("");
   const [repay, setRepay] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loanSupported, setLoanSupported] = useState<boolean | null>(loanFeatureStatus());
   const [now, setNow] = useState(() => Date.now());
 
-  const loadLoan = useCallback(async () => { if (!address) { setLoan(EMPTY_LOAN); return; } setLoan(await getUserLoan(market.id, address)); }, [address, market.id]);
+  const loadLoan = useCallback(async () => { if (!address) { setLoan(EMPTY_LOAN); return; } setLoan(await getUserLoan(market.id, address)); setLoanSupported(loanFeatureStatus()); }, [address, market.id]);
   useEffect(() => { queueMicrotask(() => void loadLoan()); }, [loadLoan]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
 
@@ -45,6 +46,8 @@ export function LoanPanel({ market, position, onComplete }: { market: ParsedMark
   }
 
   if (!connected || !address) return <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Landmark className="size-4" /> Position loan</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">Connect a wallet to manage collateral-backed loans.</CardContent></Card>;
+
+  if (loanSupported === false) return <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Landmark className="size-4" /> Position loans</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">Loans are not available on the currently deployed Testnet contract. Deploy the lending-enabled contract version to enable this feature.</CardContent></Card>;
 
   if (loan.debt > 0) return <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Landmark className="size-4" /> Active loan</CardTitle></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-2 gap-3 text-sm"><Metric label="Debt" value={formatUSDC(loan.debt)} /><Metric label="Cash collateral" value={formatUSDC(loan.cashCollateral)} /><Metric label="YES pledged" value={loan.yesCollateral.toFixed(4)} /><Metric label="NO pledged" value={loan.noCollateral.toFixed(4)} /></div>{market.state === MarketState.Resolved ? <Button className="w-full" disabled={busy} onClick={() => execute(buildSettleLoanTx(address, market.id), "Preparing settlement...")}>Settle resolved loan</Button> : <div className="space-y-2"><Label htmlFor="repay-amount">Repay amount (USDC)</Label><Input id="repay-amount" type="number" min="0" value={repay} onChange={(event) => setRepay(event.target.value)} placeholder={loan.debt.toFixed(2)} /><Button className="w-full" disabled={busy || Number(repay) <= 0} onClick={() => execute(buildRepayTx(address, market.id, Number(repay)), "Preparing repayment...")}>Repay loan</Button></div>}</CardContent></Card>;
 
