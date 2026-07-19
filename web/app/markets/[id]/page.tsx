@@ -6,6 +6,7 @@ import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { TradePanel } from "@/components/TradePanel";
 import { LoanPanel } from "@/components/LoanPanel";
+import { PriceChart } from "@/components/PriceChart";
 import { useWallet } from "@/components/WalletProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,6 @@ import {
   buildClaimLpTx,
   buildClaimTx,
   buildRestoreFootprintTx,
-  getMarket,
   getUserLpShares,
   getUserPosition,
   submitSignedTx,
@@ -31,7 +31,7 @@ import {
   outcomeLabel,
   stateLabel,
 } from "@/lib/format";
-import { BackendMarketDetail, MarketState, ParsedMarket, ParsedPosition } from "@/lib/types";
+import { MarketState, ParsedMarket, ParsedPosition } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export default function MarketDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -39,7 +39,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const marketId = Number(id);
   const { address, connected, sign } = useWallet();
   const [market, setMarket] = useState<ParsedMarket | null>(null);
-  const [backendMarket, setBackendMarket] = useState<BackendMarketDetail | null>(null);
+  const [evidenceCid, setEvidenceCid] = useState("");
   const [position, setPosition] = useState<ParsedPosition | null>(null);
   const [lpShares, setLpShares] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -49,9 +49,11 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const loadMarket = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextMarket, nextBackend] = await Promise.all([getMarket(marketId), getBackendMarket(marketId)]);
+      const nextBackend = await getBackendMarket(marketId);
+      const nextMarket = nextBackend.parsedMarket;
       setMarket(nextMarket);
-      setBackendMarket(nextBackend);
+      const rawMarket = nextBackend.market;
+      setEvidenceCid(String(rawMarket.evidence_cid ?? rawMarket.evidenceCid ?? ""));
 
       if (address && nextMarket) {
         const [nextPosition, nextLpShares] = await Promise.all([
@@ -137,8 +139,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
 
   const yesPrice = formatPriceFromBps(market.yesPriceBps);
   const noPrice = formatPriceFromBps(10_000 - market.yesPriceBps);
-  const criteriaUrl = ipfsGatewayUrl(backendMarket?.criteria_cid || backendMarket?.criteriaRef || market.criteriaRef);
-  const evidenceCid = backendMarket?.evidence_cid || backendMarket?.evidenceCid || "";
+  const criteriaUrl = ipfsGatewayUrl(market.criteriaRef);
   const evidenceUrl = ipfsGatewayUrl(evidenceCid);
   const canClaim = connected && market.state === MarketState.Resolved && holdsWinningShares(position, market.outcome);
   const canClaimLp = connected && market.state === MarketState.Resolved && lpShares > 0;
@@ -216,6 +217,8 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
               )}
             </CardContent>
           </Card>
+
+          <PriceChart marketId={market.id} currentPriceBps={market.yesPriceBps} />
 
           {market.state === MarketState.Proposed && (
             <Card>

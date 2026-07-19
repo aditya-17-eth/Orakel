@@ -5,7 +5,7 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 import { MarketCard } from "@/components/MarketCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getMarketsFromContract } from "@/lib/contract";
+import { getBackendMarkets } from "@/lib/api";
 import { ParsedMarket } from "@/lib/types";
 import Hero from "@/components/Hero";
 
@@ -19,7 +19,7 @@ export default function MarketListPage() {
     setLoading(true);
     setError(null);
     try {
-      const nextMarkets = await getMarketsFromContract();
+      const nextMarkets = await getBackendMarkets();
       setMarkets(nextMarkets);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not load markets");

@@ -5,8 +5,10 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Orakel",
-  description: "Prediction markets on Stellar.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://web-one-indol-57.vercel.app"),
+  title: { default: "Orakel", template: "%s | Orakel" },
+  description: "Trade testnet prediction markets and manage collateral-backed positions on Stellar Soroban.",
+  openGraph: { title: "Orakel Prediction Markets", description: "Prediction markets on Stellar Soroban.", type: "website" },
 };
 
 export default function RootLayout({

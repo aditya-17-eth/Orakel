@@ -12,11 +12,9 @@ import {
   buildClaimLpTx,
   buildClaimTx,
   buildRestoreFootprintTx,
-  getMarketsFromContract,
-  getUserLpShares,
-  getUserPosition,
   submitSignedTx,
 } from "@/lib/contract";
+import { getBackendPortfolio } from "@/lib/api";
 import {
   countdownLabel,
   formatUSDC,
@@ -231,24 +229,8 @@ export default function PortfolioPage() {
     if (!address) return;
     setLoading(true);
     try {
-      const allMarkets = await getMarketsFromContract();
-
-      const results = await Promise.all(
-        allMarkets.map(async (market) => {
-          const [position, lpShares] = await Promise.all([
-            getUserPosition(market.id, address),
-            getUserLpShares(market.id, address),
-          ]);
-          return { market, position, lpShares };
-        }),
-      );
-
-      const portfolio = results.filter(
-        ({ position, lpShares }) =>
-          position.yes > 0 || position.no > 0 || position.spent > 0 || lpShares > 0,
-      );
-
-      setEntries(portfolio);
+      const portfolio = await getBackendPortfolio(address);
+      setEntries(portfolio.map(({ market, position, lpShares }) => ({ market, position, lpShares })));
     } finally {
       setLoading(false);
     }

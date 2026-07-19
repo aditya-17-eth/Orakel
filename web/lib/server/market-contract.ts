@@ -58,7 +58,13 @@ export async function getMarket(id: number): Promise<Market> {
 }
 export async function getMarkets(): Promise<Market[]> {
   const count = await getMarketCount();
-  return Promise.all(Array.from({ length: count }, (_, id) => getMarket(id)));
+  const markets: Market[] = [];
+  const batchSize = 8;
+  for (let start = 0; start < count; start += batchSize) {
+    const ids = Array.from({ length: Math.min(batchSize, count - start) }, (_, offset) => start + offset);
+    markets.push(...await Promise.all(ids.map((id) => getMarket(id))));
+  }
+  return markets;
 }
 export async function getUserPosition(id: number, user: string): Promise<Position> {
   const raw = await simulate("get_user_position", [u64(id), addr(user)]) as Record<string, unknown>;

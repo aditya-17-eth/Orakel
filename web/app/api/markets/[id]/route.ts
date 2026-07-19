@@ -13,8 +13,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const user = url.searchParams.get("user");
   try {
     const market = await getMarket(marketId);
-    const position = user ? await getUserPosition(marketId, user) : null;
-    const lp = user ? await getUserLp(marketId, user) : null;
+    const [position, lp] = user
+      ? await Promise.all([getUserPosition(marketId, user), getUserLp(marketId, user)])
+      : [null, null];
     return new NextResponse(JSON.stringify({ market, position, lp, network: "stellar-testnet", criteriaGateway: market.criteriaRef ? ipfsUrl(market.criteriaRef) : null }, (_, value) => typeof value === "bigint" ? value.toString() : value), { headers: { "content-type": "application/json" } });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 }); }
 }
