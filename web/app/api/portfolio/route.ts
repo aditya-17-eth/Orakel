@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { Address } from "@stellar/stellar-sdk/minimal";
-import { getMarketCount, getMarket, getUserLoan, getUserLp, getUserPosition } from "@/lib/contract";
+import { Address } from "@stellar/stellar-sdk";
+import { getMarketCount, getMarket, getUserLoan, getUserLp, getUserPosition } from "@/lib/server/market-contract";
 import { rateLimit, requestKey } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";

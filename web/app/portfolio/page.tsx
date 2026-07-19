@@ -1,47 +1,390 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Activity, Droplets, PieChart } from "lucide-react";
-import { useWallet } from "@/providers/wallet-provider";
-import { formatStroops } from "@/lib/utils";
-import { Button, Card } from "@/components/ui";
+import { ArrowLeft, ArrowRight, RefreshCw, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { useWallet } from "@/components/WalletProvider";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  buildClaimLpTx,
+  buildClaimTx,
+  buildRestoreFootprintTx,
+  getMarketsFromContract,
+  getUserLpShares,
+  getUserPosition,
+  submitSignedTx,
+} from "@/lib/contract";
+import {
+  countdownLabel,
+  formatUSDC,
+  holdsWinningShares,
+  humanizeContractError,
+  isArchivedEntryError,
+  outcomeLabel,
+  stateLabel,
+} from "@/lib/format";
+import { MarketState, ParsedMarket, ParsedPosition } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
-type PortfolioRow = { marketId: number; question: string; state: string; yesPriceBps: string; yesShares: string; noShares: string; lpShares: string; markValue: string; claimable: string; loanDebt: string };
-type ActivityRow = { id: string; name: string; ledger: number; tx_hash: string; ledger_closed_at?: string };
-const EMPTY_TOTALS = { spent: "0", markValue: "0", claimable: "0", debt: "0" };
+interface PortfolioEntry {
+  market: ParsedMarket;
+  position: ParsedPosition;
+  lpShares: number;
+}
+
+function PositionPnL({ position, market }: { position: ParsedPosition; market: ParsedMarket }) {
+  // Rough unrealized P&L estimate based on current price
+  const yesBps = market.yesPriceBps;
+  const noBps = 10_000 - yesBps;
+  const yesValue = position.yes * (yesBps / 10_000);
+  const noValue = position.no * (noBps / 10_000);
+  const currentValue = yesValue + noValue;
+  const pnl = currentValue - position.spent;
+  const pct = position.spent > 0 ? (pnl / position.spent) * 100 : 0;
+
+  if (position.spent === 0) return null;
+
+  return (
+    <div className={cn("flex items-center gap-1 text-sm font-medium", pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+      {pnl >= 0 ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
+      {pnl >= 0 ? "+" : ""}
+      {formatUSDC(pnl)} ({pct.toFixed(1)}%)
+    </div>
+  );
+}
+
+function PortfolioCard({
+  entry,
+  onClaim,
+  claiming,
+}: {
+  entry: PortfolioEntry;
+  onClaim: (kind: "claim" | "claim_lp", marketId: number) => Promise<void>;
+  claiming: string | null;
+}) {
+  const { market, position, lpShares } = entry;
+  const isResolved = market.state === MarketState.Resolved;
+  const canClaim = isResolved && holdsWinningShares(position, market.outcome);
+  const canClaimLp = isResolved && lpShares > 0;
+  const claimKey = `${market.id}-claim`;
+  const claimLpKey = `${market.id}-claim_lp`;
+
+  return (
+    <Card className="transition-colors hover:bg-muted/30">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="text-xs">{market.category}</Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-xs",
+                  market.state === MarketState.Open && "border-emerald-500/40 text-emerald-400",
+                  market.state === MarketState.Proposed && "border-yellow-500/40 text-yellow-400",
+                  market.state === MarketState.Disputed && "border-red-500/40 text-red-400",
+                )}
+              >
+                {stateLabel(market.state)}
+              </Badge>
+              {market.outcome !== null && (
+                <Badge variant="outline" className="text-xs border-violet-500/40 text-violet-400">
+                  Outcome: {outcomeLabel(market.outcome)}
+                </Badge>
+              )}
+            </div>
+            <CardTitle className="text-sm leading-snug line-clamp-2">{market.question}</CardTitle>
+          </div>
+          <Link href={`/markets/${market.id}`} className="shrink-0">
+            <Button variant="ghost" size="icon" className="size-7">
+              <ArrowRight className="size-3.5" />
+            </Button>
+          </Link>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {/* Position details */}
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          {position.yes > 0 && (
+            <div>
+              <div className="text-muted-foreground text-xs">YES shares</div>
+              <div className="font-medium text-emerald-400">{position.yes.toFixed(4)}</div>
+            </div>
+          )}
+          {position.no > 0 && (
+            <div>
+              <div className="text-muted-foreground text-xs">NO shares</div>
+              <div className="font-medium text-red-400">{position.no.toFixed(4)}</div>
+            </div>
+          )}
+          {lpShares > 0 && (
+            <div>
+              <div className="text-muted-foreground text-xs">LP shares</div>
+              <div className="font-medium">{lpShares.toFixed(4)}</div>
+            </div>
+          )}
+          {position.spent > 0 && (
+            <div>
+              <div className="text-muted-foreground text-xs">Spent</div>
+              <div className="font-medium">{formatUSDC(position.spent)}</div>
+            </div>
+          )}
+        </div>
+
+        {/* P&L */}
+        {!isResolved && <PositionPnL position={position} market={market} />}
+
+        {/* Countdown or outcome */}
+        {!isResolved && (
+          <div className="text-xs text-muted-foreground">{countdownLabel(market)}</div>
+        )}
+
+        {/* Claim actions */}
+        {(canClaim || canClaimLp) && (
+          <>
+            <Separator />
+            <div className="flex flex-wrap gap-2">
+              {canClaim && (
+                <Button
+                  size="sm"
+                  onClick={() => onClaim("claim", market.id)}
+                  disabled={Boolean(claiming)}
+                >
+                  {claiming === claimKey ? "Claiming..." : "Claim payout"}
+                </Button>
+              )}
+              {canClaimLp && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onClaim("claim_lp", market.id)}
+                  disabled={Boolean(claiming)}
+                >
+                  {claiming === claimLpKey ? "Claiming..." : "Claim LP"}
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SummaryCard({ entries }: { entries: PortfolioEntry[] }) {
+  const totalSpent = entries.reduce((acc, e) => acc + e.position.spent, 0);
+  const totalYes = entries.reduce((acc, e) => acc + e.position.yes, 0);
+  const totalNo = entries.reduce((acc, e) => acc + e.position.no, 0);
+  const totalLp = entries.reduce((acc, e) => acc + e.lpShares, 0);
+  const activeMarkets = entries.filter((e) => e.market.state === MarketState.Open).length;
+  const resolvedMarkets = entries.filter((e) => e.market.state === MarketState.Resolved).length;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Overview</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+          <div>
+            <div className="text-muted-foreground text-xs">Total invested</div>
+            <div className="font-semibold text-lg">{formatUSDC(totalSpent)}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-xs">Markets</div>
+            <div className="font-semibold text-lg">{entries.length}</div>
+            <div className="text-xs text-muted-foreground">{activeMarkets} active · {resolvedMarkets} resolved</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-xs">Total YES / NO</div>
+            <div className="font-semibold">
+              <span className="text-emerald-400">{totalYes.toFixed(2)}</span>
+              {" / "}
+              <span className="text-red-400">{totalNo.toFixed(2)}</span>
+            </div>
+          </div>
+          {totalLp > 0 && (
+            <div>
+              <div className="text-muted-foreground text-xs">LP shares</div>
+              <div className="font-semibold">{totalLp.toFixed(4)}</div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function PortfolioPage() {
-  const wallet = useWallet();
-  const [positions, setPositions] = useState<PortfolioRow[]>([]);
-  const [events, setEvents] = useState<ActivityRow[]>([]);
-  const [totals, setTotals] = useState(EMPTY_TOTALS);
-  const [status, setStatus] = useState("");
-  const [faucetBusy, setFaucetBusy] = useState(false);
+  const { address, connected, sign } = useWallet();
+  const [entries, setEntries] = useState<PortfolioEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [claiming, setClaiming] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+
+  const loadPortfolio = useCallback(async () => {
+    if (!address) return;
+    setLoading(true);
+    try {
+      const allMarkets = await getMarketsFromContract();
+
+      const results = await Promise.all(
+        allMarkets.map(async (market) => {
+          const [position, lpShares] = await Promise.all([
+            getUserPosition(market.id, address),
+            getUserLpShares(market.id, address),
+          ]);
+          return { market, position, lpShares };
+        }),
+      );
+
+      const portfolio = results.filter(
+        ({ position, lpShares }) =>
+          position.yes > 0 || position.no > 0 || position.spent > 0 || lpShares > 0,
+      );
+
+      setEntries(portfolio);
+    } finally {
+      setLoading(false);
+    }
+  }, [address]);
 
   useEffect(() => {
-    if (!wallet.address) { setPositions([]); setEvents([]); setTotals(EMPTY_TOTALS); return; }
-    const controller = new AbortController();
-    setStatus("Loading on-chain portfolio…");
-    Promise.allSettled([
-      fetch(`/api/portfolio?wallet=${wallet.address}`, { signal: controller.signal }).then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.error); return body; }),
-      fetch(`/api/activity?wallet=${wallet.address}`, { signal: controller.signal }).then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.error); return body; }),
-    ]).then(([portfolio, activity]) => {
-      if (portfolio.status === "fulfilled") { setPositions(portfolio.value.positions ?? []); setTotals(portfolio.value.totals ?? EMPTY_TOTALS); }
-      if (activity.status === "fulfilled") setEvents(activity.value.events ?? []);
-      const failure = portfolio.status === "rejected" ? portfolio.reason : activity.status === "rejected" ? activity.reason : null;
-      if (failure && !(failure instanceof Error && failure.name === "AbortError")) setStatus(failure instanceof Error ? failure.message : String(failure)); else setStatus("");
-    });
-    return () => controller.abort();
-  }, [wallet.address]);
+    if (address) {
+      queueMicrotask(() => void loadPortfolio());
+    } else {
+      queueMicrotask(() => setEntries([]));
+    }
+  }, [address, loadPortfolio]);
 
-  async function requestFaucet() {
-    if (!wallet.address) return;
-    setFaucetBusy(true); setStatus("Requesting Testnet XLM…");
-    try { const response = await fetch("/api/faucet", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ wallet: wallet.address }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error); setStatus("Testnet XLM sent to your wallet."); }
-    catch (error) { setStatus(error instanceof Error ? error.message : String(error)); }
-    finally { setFaucetBusy(false); }
+  const handleClaim = useCallback(
+    async (kind: "claim" | "claim_lp", marketId: number) => {
+      if (!address) return;
+      const key = `${marketId}-${kind}`;
+      setClaiming(key);
+      const toastId = toast.loading(kind === "claim" ? "Preparing claim..." : "Preparing LP claim...");
+
+      try {
+        const txXdr =
+          kind === "claim"
+            ? await buildClaimTx(address, marketId)
+            : await buildClaimLpTx(address, marketId);
+
+        toast.loading("Sign in your wallet...", { id: toastId });
+        const signed = await sign(txXdr);
+        toast.loading("Submitting...", { id: toastId });
+        const result = await submitSignedTx(signed);
+        toast.success(`Claim confirmed: ${result.hash.slice(0, 8)}...`, { id: toastId });
+        void loadPortfolio();
+      } catch (error) {
+        if (isArchivedEntryError(error)) {
+          try {
+            setRestoring(true);
+            toast.loading("Restoring your position...", { id: toastId });
+            const restoreXdr = await buildRestoreFootprintTx(address, kind, marketId);
+            const signedRestore = await sign(restoreXdr);
+            const restoreTx = await submitSignedTx(signedRestore);
+            if (!restoreTx) throw new Error("Restore failed");
+
+            toast.loading("Retrying claim...", { id: toastId });
+            const retryXdr =
+              kind === "claim"
+                ? await buildClaimTx(address, marketId)
+                : await buildClaimLpTx(address, marketId);
+            const signedRetry = await sign(retryXdr);
+            const retry = await submitSignedTx(signedRetry);
+            toast.success(`Claim confirmed: ${retry.hash.slice(0, 8)}...`, { id: toastId });
+            void loadPortfolio();
+          } catch (restoreError) {
+            toast.error(humanizeContractError(restoreError), { id: toastId });
+          } finally {
+            setRestoring(false);
+          }
+        } else {
+          toast.error(humanizeContractError(error), { id: toastId });
+        }
+      } finally {
+        setClaiming(null);
+      }
+    },
+    [address, sign, loadPortfolio],
+  );
+
+  if (!connected) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+          <Wallet className="size-12 text-muted-foreground" />
+          <div>
+            <h2 className="text-xl font-semibold">Connect your wallet</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Connect a wallet to view your positions across all Orakel markets.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  return <div className="grid-bg min-h-screen py-10"><div className="container mx-auto px-4"><div className="mb-8 flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><div className="glass-shard flex h-12 w-12 items-center justify-center"><PieChart className="h-6 w-6 text-neon-cyan" /></div><div><h1 className="text-3xl font-bold">Portfolio</h1><p className="text-text-muted">Positions, claims, loans, and indexed activity.</p></div></div><Button variant="outline" disabled={!wallet.address || faucetBusy} onClick={requestFaucet}><Droplets className="mr-2 h-4 w-4" />{faucetBusy ? "Requesting…" : "Testnet faucet"}</Button></div>{!wallet.address ? <Card className="p-10 text-center"><h2 className="text-lg font-semibold">Connect your wallet</h2><p className="mt-2 text-sm text-text-muted">Your portfolio is read from the Stellar Testnet contract.</p><Button className="mt-5" onClick={wallet.connect}>Connect wallet</Button></Card> : <><div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[["Marked value", totals.markValue], ["Total spent", totals.spent], ["Claimable", totals.claimable], ["Loan debt", totals.debt]].map(([label, value]) => <Card key={label} className="p-5"><div className="text-xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-2 font-mono text-2xl text-neon-cyan">{formatStroops(value)}</div></Card>)}</div>{positions.length ? <div className="grid gap-4 md:grid-cols-2">{positions.map((row) => <Link key={row.marketId} href={`/markets/${row.marketId}`}><Card className="h-full p-5 transition hover:border-neon-cyan/40"><div className="flex justify-between gap-4"><h2 className="font-semibold">{row.question}</h2><span className="text-xs text-neon-cyan">{row.state}</span></div><div className="mt-5 grid grid-cols-3 gap-3 text-sm"><div><div className="text-xs text-text-muted">YES</div><div className="mt-1 font-mono">{formatStroops(row.yesShares)}</div></div><div><div className="text-xs text-text-muted">NO</div><div className="mt-1 font-mono">{formatStroops(row.noShares)}</div></div><div><div className="text-xs text-text-muted">Debt</div><div className="mt-1 font-mono text-ultra-magenta">{formatStroops(row.loanDebt)}</div></div></div></Card></Link>)}</div> : !status && <Card className="p-8 text-center text-text-muted">No positions found for this wallet.</Card>}<Card className="mt-6 p-6"><div className="flex items-center gap-2"><Activity className="h-4 w-4 text-neon-cyan" /><h2 className="font-semibold">Recent activity</h2></div><div className="mt-4 divide-y divide-card-border">{events.length ? events.map((event) => <div key={event.id} className="flex items-center justify-between py-3 text-sm"><span className="font-mono uppercase text-neon-cyan">{event.name}</span><span className="text-text-muted">Ledger {event.ledger}</span></div>) : <p className="py-4 text-sm text-text-muted">No indexed activity yet.</p>}</div></Card></>}{status && <p className="mt-5 text-center text-sm text-text-muted">{status}</p>}</div></div>;
+  return (
+    <div className="container mx-auto space-y-6 px-4 py-8">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Portfolio</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Your positions across all markets
+          </p>
+        </div>
+        <Button variant="outline" onClick={loadPortfolio} disabled={loading}>
+          <RefreshCw className={loading ? "animate-spin" : ""} />
+          Refresh
+        </Button>
+      </div>
+
+      {loading && entries.length === 0 ? (
+        <div className="space-y-4">
+          <div className="h-32 animate-pulse rounded-lg bg-muted" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[0, 1, 2].map((id) => (
+              <div key={id} className="h-40 animate-pulse rounded-lg bg-muted" />
+            ))}
+          </div>
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="rounded-lg border p-12 text-center">
+          <p className="text-sm text-muted-foreground">No positions found.</p>
+          <Link href="/" className="mt-3 inline-flex items-center gap-2 text-sm underline-offset-4 hover:underline">
+            <ArrowLeft className="size-4" />
+            Browse markets
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {restoring && (
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm text-yellow-400">
+              Restoring archived position — this may take a moment…
+            </div>
+          )}
+
+          <SummaryCard entries={entries} />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {entries.map((entry) => (
+              <PortfolioCard
+                key={entry.market.id}
+                entry={entry}
+                onClaim={handleClaim}
+                claiming={claiming}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

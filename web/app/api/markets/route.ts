@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMarkets } from "@/lib/contract";
+import { getMarkets } from "@/lib/server/market-contract";
 import { rateLimit, requestKey } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";

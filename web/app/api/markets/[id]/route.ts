@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMarket, getUserLp, getUserPosition } from "@/lib/contract";
+import { getMarket, getUserLp, getUserPosition } from "@/lib/server/market-contract";
 import { ipfsUrl } from "@/lib/utils";
 import { rateLimit, requestKey } from "@/lib/rate-limit";
 

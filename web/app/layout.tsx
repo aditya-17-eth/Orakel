@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import "./globals.css";
 import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
-import { WalletProvider } from "@/providers/wallet-provider";
+import { WalletProvider } from "@/components/WalletProvider";
+import { Toaster } from "@/components/ui/sonner";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Orakel — Stellar Prediction Markets",
-  description: "Collateralized prediction markets and market-backed lending on Stellar Testnet.",
+  title: "Orakel",
+  description: "Prediction markets on Stellar.",
 };
 
 export default function RootLayout({
@@ -15,12 +15,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">
+    <html lang="en" className="dark">
+      <body className="min-h-screen">
         <WalletProvider>
           <Navbar />
-          <main className="flex-1 pt-16">{children}</main>
-          <Footer />
+          <main>{children}</main>
+          <Toaster />
         </WalletProvider>
       </body>
     </html>
