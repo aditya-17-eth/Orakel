@@ -1087,6 +1087,33 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "LoanReserve"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": {
+                            "hi": 0,
+                            "lo": 0
+                          }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "LoansEnabled"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "bool": false
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "LpFeeBps"
                             }
                           ]
@@ -1105,6 +1132,18 @@
                         },
                         "val": {
                           "u64": 1
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "MaxLeverageBps"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 30000
                         }
                       },
                       {

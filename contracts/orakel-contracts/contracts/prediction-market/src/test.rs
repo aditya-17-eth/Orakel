@@ -54,10 +54,10 @@ fn create_default_market(s: &Setup) -> u64 {
         &String::from_str(&s.env, "Will Team A beat Team B?"),
         &Symbol::new(&s.env, "football"),
         &String::from_str(&s.env, "ipfs://criteria-cid"),
-        &10_000u64,          // lock_time
-        &20_000u64,          // resolve_time
-        &DISPUTE_WINDOW,     // dispute_window
-        &(500 * UNIT),       // position_cap
+        &10_000u64,      // lock_time
+        &20_000u64,      // resolve_time
+        &DISPUTE_WINDOW, // dispute_window
+        &(500 * UNIT),   // position_cap
         &BOND,
         &SEED,
     )
@@ -312,4 +312,62 @@ fn slippage_protection_reverts() {
         .contract
         .try_buy(&id, &alice, &true, &(100 * UNIT), &(1_000 * UNIT));
     assert!(res.is_err()); // demanded impossible output
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #29)")] // LoansDisabled
+fn loans_are_disabled_by_default() {
+    let s = setup();
+    let id = create_default_market(&s);
+    let alice = Address::generate(&s.env);
+    fund(&s, &alice, 1_000 * UNIT);
+    let shares = s.contract.buy(&id, &alice, &true, &(100 * UNIT), &0);
+    s.contract
+        .borrow(&id, &alice, &true, &(shares / 4), &UNIT);
+}
+
+#[test]
+fn borrow_and_repay_returns_pledged_shares() {
+    let s = setup();
+    let id = create_default_market(&s);
+    let alice = Address::generate(&s.env);
+    fund(&s, &alice, 1_000 * UNIT);
+    let shares = s.contract.buy(&id, &alice, &true, &(100 * UNIT), &0);
+    let before = s.contract.get_user_position(&id, &alice);
+
+    s.contract.fund_loan_reserve(&s.admin, &(1_000 * UNIT));
+    s.contract.set_loan_config(&true, &30_000);
+    let collateral = shares / 4;
+    let borrowed = s.contract.borrow(&id, &alice, &true, &collateral, &UNIT);
+    assert_eq!(borrowed, UNIT);
+    assert_eq!(s.contract.get_user_loan(&id, &alice).debt, UNIT);
+
+    s.contract.repay(&id, &alice, &UNIT);
+    let after = s.contract.get_user_position(&id, &alice);
+    assert_eq!(after.yes, before.yes);
+    assert_eq!(s.contract.get_user_loan(&id, &alice).debt, 0);
+}
+
+#[test]
+fn resolved_loan_is_settled_from_pledged_shares() {
+    let s = setup();
+    let id = create_default_market(&s);
+    let alice = Address::generate(&s.env);
+    fund(&s, &alice, 1_000 * UNIT);
+    let shares = s.contract.buy(&id, &alice, &true, &(100 * UNIT), &0);
+    s.contract.fund_loan_reserve(&s.admin, &(1_000 * UNIT));
+    s.contract.set_loan_config(&true, &30_000);
+    let collateral = shares / 4;
+    s.contract.borrow(&id, &alice, &true, &collateral, &UNIT);
+
+    warp(&s, 20_001);
+    let keeper = Address::generate(&s.env);
+    fund(&s, &keeper, BOND);
+    s.contract.propose(&id, &keeper, &Outcome::Yes);
+    warp(&s, 20_001 + DISPUTE_WINDOW);
+    s.contract.finalize(&id);
+
+    let settled = s.contract.settle_loan(&id, &alice);
+    assert_eq!(settled, collateral);
+    assert_eq!(s.contract.get_user_loan(&id, &alice).debt, 0);
 }

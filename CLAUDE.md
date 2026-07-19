@@ -32,9 +32,9 @@ Pinned to `soroban-sdk 21.7.7`. To move to SDK 22/23: bump the version in
 `Cargo.toml` and change `env.register_contract(None, OrakelMarket)` to
 `env.register(OrakelMarket, ())` in `src/test.rs`.
 
-The contract is **feature-frozen** (per the architecture doc). Remaining
-contract work is limited to hardening (e.g. proptest fuzzing of invariants),
-not new entrypoints.
+Contract changes must preserve the invariants below. New lending entrypoints
+are isolated, disabled by default, and require dedicated tests plus a security
+review before production enablement.
 
 ## Non-negotiable invariants (do not break these)
 
@@ -74,11 +74,14 @@ that asserts the relevant invariant.
 
 - **Write:** `initialize`, `create_market`, `buy`, `sell`, `add_liquidity`,
   `remove_liquidity`, `propose`, `dispute`, `finalize`, `arbiter_resolve`,
-  `claim`, `claim_lp`, `pause`, `set_arbiter`, `set_fees`, `withdraw_fees`
+  `claim`, `claim_lp`, `pause`, `set_arbiter`, `set_fees`, `withdraw_fees`,
+  `set_loan_config`, `fund_loan_reserve`, `withdraw_loan_reserve`, `borrow`,
+  `repay`, `settle_loan`
 - **Read (free simulation, used by frontend/indexer):** `get_market`,
-  `yes_price_bps`, `get_user_position`, `get_user_lp`, `market_count`
+  `yes_price_bps`, `get_user_position`, `get_user_loan`, `get_user_lp`,
+  `market_count`
 - **Events:** `mkt_new, buy, sell, liq_add, liq_rem, propose, dispute, final,
-  arb_res, claim, claim_lp, paused, arbiter, feeswd`
+  arb_res, claim, claim_lp, borrow, repay, loan_set, paused, arbiter, feeswd`
 
 ## Security posture
 
