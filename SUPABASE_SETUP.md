@@ -8,6 +8,7 @@ never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser or add it to a
 2. In its SQL Editor, run both migrations in order:
    - `supabase/migrations/001_contract_events.sql`
    - `supabase/migrations/002_activity_topics_index.sql`
+   - `supabase/migrations/003_leaderboard_faucet.sql`
 3. Add these values to the backend root `.env` file:
 
 ```env

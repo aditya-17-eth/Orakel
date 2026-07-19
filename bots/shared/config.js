@@ -16,11 +16,13 @@ export const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?
 export const INDEXER_START_LEDGER = process.env.INDEXER_START_LEDGER ?? '1';
 export const INDEXER_CHECKPOINT_PATH = process.env.INDEXER_CHECKPOINT_PATH ?? '.orakel-indexer-checkpoint.json';
 export const INDEXER_POLL_MS = process.env.INDEXER_POLL_MS ?? '5000';
+export const FAUCET_URL = process.env.FAUCET_URL ?? 'https://friendbot.stellar.org';
+export const FAUCET_COOLDOWN_SECONDS = process.env.FAUCET_COOLDOWN_SECONDS ?? '86400';
 export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? '';
 export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID ?? '';
 export const server = new rpc.Server(RPC_URL);
 
-export const config = { RPC_URL, NETWORK_PASSPHRASE, CONTRACT_ID, USDC_SAC, PINATA_JWT, KEEPER_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INDEXER_START_LEDGER, INDEXER_CHECKPOINT_PATH, INDEXER_POLL_MS, server };
+export const config = { RPC_URL, NETWORK_PASSPHRASE, CONTRACT_ID, USDC_SAC, PINATA_JWT, KEEPER_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INDEXER_START_LEDGER, INDEXER_CHECKPOINT_PATH, INDEXER_POLL_MS, FAUCET_URL, FAUCET_COOLDOWN_SECONDS, server };
 
 export function validateIndexerConfig() {
   const missing = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'].filter((name) => !process.env[name]);
