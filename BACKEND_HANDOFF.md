@@ -20,6 +20,12 @@ owned frontend in `web/` and Telegram work were intentionally not changed.
   - continues polling with `npm run indexer`.
 - A status command that checks configuration, Supabase access/schema, and
   Stellar RPC access: `npm run status`.
+- A production portfolio/activity query layer:
+  - `getPortfolio()` reads positions, LP shares, prices, and claimable values
+    from Soroban, with bounded market pagination and concurrency limits.
+  - `getWalletActivity()` reads only the authenticated wallet's indexed
+    activity events with a stable cursor.
+  - user wallets are validated as Stellar G-addresses before any query.
 - Docker and Docker Compose files for a restart-safe, long-running worker.
 - Environment examples and setup/deployment documentation.
 
@@ -100,6 +106,9 @@ limit 50;
 - `bots/shared/scripts/indexer.js` — CLI entry point.
 - `bots/shared/scripts/status.js` — dependency health/status check.
 - `supabase/migrations/001_contract_events.sql` — database schema.
+- `supabase/migrations/002_activity_topics_index.sql` — wallet activity query index.
+- `bots/shared/portfolio.js` — on-chain portfolio reads and valuation.
+- `bots/shared/activity.js` — server-side wallet activity query.
 - `bots/shared/Dockerfile` and `docker-compose.yml` — worker deployment.
 - `SUPABASE_SETUP.md` and `DEPLOY_INDEXER.md` — setup/operations guides.
 
@@ -118,3 +127,16 @@ limit 50;
 - Test a real contract action and confirm its event appears in Supabase.
 - Add production monitoring/alerts and a backup/retention policy.
 - Complete an independent security review before any Mainnet migration.
+
+## Portfolio/activity API contract
+
+The frontend should call server-side routes that wrap these shared functions:
+
+```js
+const portfolio = await getPortfolio({ wallet, offset: 0, limit: 25 });
+const activity = await getWalletActivity({ wallet, limit: 50, cursor });
+```
+
+The response amounts are strings containing 7-decimal token base units. Format
+them only at the UI boundary. Never accept a wallet address from a session
+without validating it, and never expose the Supabase service-role key.
