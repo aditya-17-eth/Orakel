@@ -1,0 +1,7 @@
+"use client";
+import { useEffect, useState } from "react";
+import type { Market } from "@/types/market";
+import { MarketCard } from "@/components/market-card";
+import { Card } from "@/components/ui";
+
+export function MarketList() { const [markets, setMarkets] = useState<Market[]>([]); const [error, setError] = useState<string>(); const [loading, setLoading] = useState(true); useEffect(() => { const controller = new AbortController(); fetch("/api/markets", { signal: controller.signal }).then(async (response) => { const payload = await response.json(); if (!response.ok) throw new Error(payload.error ?? "Unable to load markets."); return payload.markets as Market[]; }).then(setMarkets).catch((e) => { if (e instanceof Error && e.name !== "AbortError") setError(e.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, []); if (loading) return <div className="grid gap-4 md:grid-cols-2"><Card className="h-56 animate-pulse" /><Card className="h-56 animate-pulse" /></div>; if (error) return <Card className="p-8 text-center"><p className="font-medium text-red">Markets unavailable</p><p className="mt-2 text-sm text-text-muted">{error}</p></Card>; if (!markets.length) return <Card className="p-8 text-center text-text-muted">No markets have been created yet.</Card>; return <div className="grid gap-4 md:grid-cols-2">{markets.map((market) => <MarketCard key={market.id} market={market} />)}</div>; }

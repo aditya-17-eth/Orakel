@@ -1193,7 +1193,7 @@ fn require_open_for_trading(env: &Env, m: &Market) {
     }
 }
 
-fn token_client(env: &Env) -> token::Client {
+fn token_client(env: &Env) -> token::Client<'_> {
     let addr: Address = env
         .storage()
         .instance()

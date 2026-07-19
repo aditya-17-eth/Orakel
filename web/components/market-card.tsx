@@ -1,0 +1,9 @@
+import Link from "next/link";
+import { ArrowUpRight, Clock3 } from "lucide-react";
+import type { Market } from "@/types/market";
+import { Badge, Card } from "@/components/ui";
+import { formatPercent } from "@/lib/utils";
+import { Countdown } from "@/components/countdown";
+
+const stateClasses: Record<string, string> = { Open: "border-emerald-500/30 text-emerald-300", Proposed: "border-amber-500/30 text-amber-300", Disputed: "border-orange-500/30 text-orange-300", Resolved: "border-violet-500/30 text-violet-300" };
+export function MarketCard({ market }: { market: Market }) { const deadline = market.state === "Open" ? market.lockTime : market.resolveTime; return <Link href={`/markets/${market.id}`} className="focus-ring block"><Card className="group h-full p-5 transition hover:-translate-y-0.5 hover:border-neon-cyan/40"><div className="mb-6 flex items-start justify-between gap-4"><div><div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-wider text-text-muted"><span>{market.category}</span><span>·</span><span>Market {market.id}</span></div><h2 className="max-w-xl text-lg font-semibold leading-snug">{market.question}</h2></div><ArrowUpRight size={18} className="shrink-0 text-text-muted transition group-hover:text-neon-cyan" /></div><div className="flex items-end justify-between"><div><div className="text-3xl font-semibold tracking-tight">{(Number(market.yesPriceBps) / 100).toFixed(1)}¢</div><div className="mt-1 text-sm text-text-muted">YES · {formatPercent(market.yesPriceBps)}</div></div><div className="text-right"><Badge className={stateClasses[market.state]}>{market.state}</Badge><div className="mt-3 flex items-center justify-end gap-1 text-xs text-text-muted"><Clock3 size={13} /> {deadline ? <Countdown timestamp={deadline} /> : "No deadline"}</div></div></div></Card></Link>; }
