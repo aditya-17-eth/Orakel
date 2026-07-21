@@ -29,6 +29,23 @@ let keeper;
 let supportedAssets = new Set();
 let lastHeartbeat = 0;
 
+// Per-market alert dedup: the last reason we alerted about for each market.
+// A market whose situation is unchanged (e.g. market 0 with no oracle data)
+// alerts once and then stays silent — the 10-min heartbeat proves liveness.
+// A *changed* reason re-alerts; a successful proposal clears the entry.
+const lastAlertReason = new Map();
+
+/**
+ * Send a per-market alert only when its reason differs from the last one sent
+ * for that market. Non-action notifications (skips, errors) go through here so
+ * a persistent condition can't spam the group every 60s.
+ */
+async function alertOnce(id, reasonKey, message) {
+  if (lastAlertReason.get(id) === reasonKey) return;
+  lastAlertReason.set(id, reasonKey);
+  await sendTelegram(message);
+}
+
 function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
@@ -50,18 +67,18 @@ async function processMarket(id) {
 
   const parsed = parseMarket(m);
   if (!parsed.confident) {
-    await sendTelegram(`⚠️ keeper: skipping market ${id} — ${parsed.reason}`);
+    await alertOnce(id, 'unparseable', `⚠️ keeper: skipping market ${id} — ${parsed.reason}`);
     return true;
   }
   if (!supportedAssets.has(parsed.asset)) {
-    await sendTelegram(`⚠️ keeper: skipping market ${id} — asset ${parsed.asset} not tracked by Reflector`);
+    await alertOnce(id, `unsupported:${parsed.asset}`, `⚠️ keeper: skipping market ${id} — asset ${parsed.asset} not tracked by Reflector`);
     return true;
   }
 
   const resolveTs = Number(m.resolve_time);
   const priceData = await priceAt(parsed.asset, resolveTs);
   if (!priceData) {
-    await sendTelegram(`⚠️ keeper: skipping market ${id} — no Reflector price for ${parsed.asset} at ${roundToBoundary(resolveTs)}`);
+    await alertOnce(id, 'noprice', `⚠️ keeper: skipping market ${id} — no Reflector price for ${parsed.asset} at ${roundToBoundary(resolveTs)}`);
     return true;
   }
 
@@ -95,6 +112,7 @@ async function processMarket(id) {
     `${parsed.asset}/USD ${rawToUsd(priceData.price, priceData.decimals)} ${CMP_TEXT[parsed.comparator]} $${parsed.thresholdUsd}\n` +
     `evidence: ${formatCriteriaLink(cid)}\ntx: ${hash}`,
   );
+  lastAlertReason.delete(id); // proposal succeeded — reset dedup for this market
   return true;
 }
 
@@ -106,7 +124,7 @@ async function runPass() {
       if (await processMarket(id)) watched++;
     } catch (err) {
       const code = err instanceof InvokeError ? err.code : null;
-      await sendTelegram(`❌ keeper error on market ${id}: ${err?.message ?? err}${code != null ? ` (contract #${code})` : ''}`);
+      await alertOnce(id, `error:${code ?? err?.message ?? err}`, `❌ keeper error on market ${id}: ${err?.message ?? err}${code != null ? ` (contract #${code})` : ''}`);
     }
   }
 
