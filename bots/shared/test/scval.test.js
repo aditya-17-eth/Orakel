@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Keypair } from '@stellar/stellar-sdk';
-import { addr, i128, u64, u32, sym, str, toNative } from '../scval.js';
+import { addr, i128, u64, u32, sym, str, vec, toNative } from '../scval.js';
 
 test('addr round-trips a G-address', () => {
   const g = Keypair.random().publicKey();
@@ -57,4 +57,9 @@ test('u64 round-trips a timestamp', () => {
 test('sym and str round-trip', () => {
   assert.equal(toNative(sym('football')), 'football');
   assert.equal(toNative(str('Will Team A win?')), 'Will Team A win?');
+});
+
+test('vec builds a Reflector Other-asset vector', () => {
+  assert.deepEqual(toNative(vec([sym('Other'), sym('BTC')])), ['Other', 'BTC']);
+  assert.deepEqual(toNative(vec([])), []);
 });

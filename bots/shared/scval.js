@@ -47,6 +47,15 @@ export function sym(s) {
   return nativeToScVal(s, { type: 'symbol' });
 }
 
+/**
+ * Vec ScVal from an array of already-built ScVals. Used for enum-with-data
+ * arguments such as Reflector's `Asset::Other(BTC)` == vec([sym('Other'),
+ * sym('BTC')]). Keeps SDK/xdr construction inside this one shared module.
+ */
+export function vec(scvals = []) {
+  return xdr.ScVal.scvVec(scvals);
+}
+
 /** String ScVal (arbitrary text, e.g. the market question or criteria_ref). */
 export function str(s) {
   return nativeToScVal(s, { type: 'string' });
