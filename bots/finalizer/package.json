@@ -1,0 +1,13 @@
+{
+  "name": "@orakel/finalizer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Orakel finalizer bot — finalizes undisputed proposals after their dispute window closes.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}

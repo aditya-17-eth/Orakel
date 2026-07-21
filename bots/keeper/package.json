@@ -1,0 +1,14 @@
+{
+  "name": "@orakel/keeper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Orakel keeper bot — proposes outcomes for Open crypto_price markets past resolve_time.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  }
+}
