@@ -14,8 +14,8 @@
 import { simulate, invoke, InvokeError, sendTelegram, loadKeypair, formatCriteriaLink } from '../shared/index.js';
 import { u64, u32, addr } from '../shared/scval.js';
 import { CONTRACT_ID, LIE_MODE } from '../shared/config.js';
-import { getDecimals, getSupportedAssets, priceAt, roundToBoundary } from './reflector.js';
-import { parseMarket, invertOutcome, Outcome } from './parse.js';
+import { getDecimals, getSupportedAssets, priceAt, roundToBoundary } from '../shared/reflector.js';
+import { parseMarket, invertOutcome, Outcome } from '../shared/parse.js';
 import { pinEvidence } from './pinata.js';
 
 const LOOP_MS = 60_000;

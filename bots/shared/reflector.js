@@ -12,9 +12,9 @@
 // to the 300s grid), never lastprice — so the keeper and the watcher, sampling
 // the same boundary, derive identical readings.
 
-import { simulate } from '../shared/simulate.js';
-import { sym, u64, vec } from '../shared/scval.js';
-import { REFLECTOR_CONTRACT } from '../shared/config.js';
+import { simulate } from './simulate.js';
+import { sym, u64, vec } from './scval.js';
+import { REFLECTOR_CONTRACT } from './config.js';
 
 export const REFLECTOR_RESOLUTION_SECONDS = 300;
 
