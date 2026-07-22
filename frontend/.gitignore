@@ -1,8 +1,3 @@
-# Rust
-/target/
-**/target/
-*.wasm
-
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
@@ -28,10 +23,6 @@
 # misc
 .DS_Store
 *.pem
-
-# Internal docs kept local; publish only the market criteria docs
-docs/*
-!docs/criteria/
 
 # debug
 npm-debug.log*
