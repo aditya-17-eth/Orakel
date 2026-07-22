@@ -4,15 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is actually here
 
-Only one buildable component exists today: the **Soroban prediction-market
-contract** (Rust, `no_std`) at
-`contracts/orakel-contracts/contracts/prediction-market/`. The `docs/`
-folder (`ORAKEL_ARCHITECTURE.md`, `ORAKEL_SPRINT_PLAN.md`, `SECURITY_REVIEW.md`)
-describes a five-part system — contract + three bots (keeper/watcher/finalizer)
-+ indexer + Next.js web app. **The bots, indexer, and web app are not built
-yet.** Treat the architecture doc as design intent, not existing code, and read
-it (`docs/ORAKEL_ARCHITECTURE.md`, Section 2 "life of one market") before doing
-cross-component work.
+The `docs/` folder (`ORAKEL_ARCHITECTURE.md`, `ORAKEL_SPRINT_PLAN.md`,
+`SECURITY_REVIEW.md`) describes a five-part system — contract + three bots
+(keeper/watcher/finalizer) + indexer + Next.js web app. Current status:
+
+- **Soroban prediction-market contract** (Rust, `no_std`) at
+  `contracts/orakel-contracts/contracts/prediction-market/` — built,
+  feature-frozen.
+- **The three bots** live under `bots/` and are built:
+  - `bots/keeper/` — proposes outcomes for Open `crypto_price` markets past
+    `resolve_time` (Reflector + Pinata evidence).
+  - `bots/watcher/` — **H-3 mitigation**: re-derives each proposed outcome with
+    the *identical* shared Reflector read and disputes wrong ones within the
+    window (CoinGecko is an alert-only divergence detector, never a dispute
+    trigger).
+  - `bots/finalizer/` — finalizes undisputed proposals after the dispute window.
+- **`bots/shared/`** — the plumbing every bot imports: `invoke` (signed
+  build→simulate→assemble→sign→submit→confirm), `simulate` (free reads),
+  `scval`, `telegram`, `config`/`loadKeypair`, and the shared oracle-derivation
+  logic `reflector.js` + `parse.js` (keeper and watcher MUST share these so an
+  honest proposal never triggers a false dispute). Also contains the **indexer**
+  (`indexer.js`, `db.js`, `scripts/indexer.js` → Supabase) and portfolio/
+  activity/timeline/leaderboard/faucet backend helpers — built.
+- **The Next.js web app is the only part not built yet.**
+
+Read `docs/ORAKEL_ARCHITECTURE.md` Section 2 ("life of one market") before doing
+cross-component work; treat unbuilt parts of the doc as design intent.
 
 ## Build & test
 
@@ -35,6 +52,30 @@ Pinned to `soroban-sdk 21.7.7`. To move to SDK 22/23: bump the version in
 The contract is **feature-frozen** (per the architecture doc). Remaining
 contract work is limited to hardening (e.g. proptest fuzzing of invariants),
 not new entrypoints.
+
+### Bots (Node ESM, Node ≥20)
+
+Install once in the shared package, then run each bot from its own directory:
+
+```bash
+cd bots/shared && npm ci          # installs deps for shared + all bots
+node --test                       # shared unit tests (invoke, scval, parse, events, ...)
+cd bots/keeper    && node --test  # keeper unit tests (parse lives in shared now)
+cd bots/watcher   && node --test  # watcher unit tests (coingecko)
+
+# run a bot (secrets come from the repo-root .env; see .env.example):
+cd bots/keeper    && npm start    # needs KEEPER_SECRET (XLM + USDC bonds)
+cd bots/watcher   && npm start    # needs WATCHER_SECRET (XLM + USDC bonds)
+cd bots/finalizer && npm start    # needs FINALIZER_SECRET (XLM only)
+```
+
+Notes:
+- `node_modules/` is gitignored; the OneDrive move eroded it, so a clean
+  `npm ci` (not just `npm install`) is the reliable fix.
+- Secrets live only in the repo-root `.env` (`config.js` loads it via dotenv).
+  Each bot loads its own `*_SECRET` by name via `loadKeypair`.
+- Bots send Telegram on every action + a 10-min heartbeat, dedup repeated
+  alerts per market, and never let a loop iteration crash the process.
 
 ## Non-negotiable invariants (do not break these)
 

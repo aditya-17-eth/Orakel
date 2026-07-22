@@ -1,0 +1,14 @@
+{
+  "name": "@orakel/watcher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Orakel watcher bot (H-3 mitigation) — re-derives proposed outcomes and disputes wrong ones within the dispute window.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  }
+}
